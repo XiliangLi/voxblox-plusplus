@@ -110,8 +110,9 @@ Label LabelTsdfIntegrator::getNextUnassignedLabel(
       label_it = assigned_labels.find(label_count.label);
       if (label_it == assigned_labels.end() &&
           (label_count.label_confidence >= max_confidence ||
-           (label_count.label == preferred_label && preferred_label != 0u &&
+           (label_count.label == preferred_label && preferred_label != 0u &&      // 这个逻辑好像有点问题, preferred_label 应该一直为 0
             label_count.label_confidence == max_confidence))) {
+        preferred_label = label_count.label;                                      // 更新 preferred_label
         max_confidence = label_count.label_confidence;
         voxel_label = label_count.label;
       }
@@ -195,7 +196,7 @@ void LabelTsdfIntegrator::computeSegmentLabelCandidates(
     Layer<TsdfVoxel>::BlockType::ConstPtr tsdf_block_ptr =
         layer_->getBlockPtrByCoordinates(point_G);
 
-    if (label_block_ptr != nullptr) {
+    if (tsdf_block_ptr != nullptr && label_block_ptr != nullptr) {
       const LabelVoxel& label_voxel =
           label_block_ptr->getVoxelByCoordinates(point_G);
       const TsdfVoxel& tsdf_voxel =
@@ -510,7 +511,7 @@ void LabelTsdfIntegrator::integratePointCloud(const Transformation& T_G_C,
                                               const Pointcloud& points_C,
                                               const Colors& colors,
                                               const Label& label,
-                                              const bool freespace_points) {
+                                              const bool freespace_points, const bool deintegrate) {
   CHECK_EQ(points_C.size(), colors.size());
   CHECK_GE(points_C.size(), 0u);
 
@@ -655,10 +656,14 @@ void LabelTsdfIntegrator::integrateRays(
   } else {
     std::list<std::thread> integration_threads;
     for (size_t i = 0u; i < config_.integrator_threads; ++i) {
+      // integration_threads.emplace_back(
+      //     &LabelTsdfIntegrator::integrateVoxels, this, T_G_C,
+      //     std::cref(points_C), std::cref(colors), label, enable_anti_grazing,
+      //     clearing_ray, std::cref(voxel_map), std::cref(clear_map), i);
       integration_threads.emplace_back(
           &LabelTsdfIntegrator::integrateVoxels, this, T_G_C,
-          std::cref(points_C), std::cref(colors), label, enable_anti_grazing,
-          clearing_ray, std::cref(voxel_map), std::cref(clear_map), i);
+          points_C, colors, label, enable_anti_grazing,
+          clearing_ray, voxel_map, clear_map, i);
     }
 
     for (std::thread& thread : integration_threads) {
@@ -741,7 +746,7 @@ void LabelTsdfIntegrator::swapLabels(const Label& old_label,
         changeLabelCount(updated_label, 1);
 
         changeLabelCount(previous_label, -1);
-        if (!tsdf_block->updated()) {
+        if (tsdf_block != nullptr && !tsdf_block->updated()) {
           label_block->updated() = true;
         }
       }

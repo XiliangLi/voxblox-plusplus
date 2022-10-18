@@ -119,7 +119,8 @@ bool MeshLabelIntegrator::generateMesh(bool only_mesh_updated_blocks,
   for (size_t i = 0u; i < config_.integrator_threads; ++i) {
     integration_threads.emplace_back(
         &MeshLabelIntegrator::generateMeshBlocksFunction, this,
-        std::cref(all_tsdf_blocks), clear_updated_flag, index_getter.get());
+        // std::cref(all_tsdf_blocks), clear_updated_flag, index_getter.get());
+        all_tsdf_blocks, clear_updated_flag, index_getter.get());
   }
 
   for (std::thread& thread : integration_threads) {
@@ -194,12 +195,12 @@ void MeshLabelIntegrator::updateMeshForBlock(const BlockIndex& block_index) {
     LOG(ERROR) << "Trying to mesh a non-existent block at index: "
                << block_index.transpose();
     return;
-  }
+  
   // TODO(margaritaG): this is actually possible because with voxel carving we
   // do not allocate labels along the ray, just nearby surfaces.
-  // } else if (!(tsdf_block && label_block)) {
-  //   LOG(FATAL) << "Block allocation differs between the two layers.";
-  // }
+  } else if (!(tsdf_block && label_block)) {
+    LOG(FATAL) << "Block allocation differs between the two layers.";
+  }
   extractBlockMesh(tsdf_block, mesh_block);
   // Update colors if needed.
   if (config_.use_color) {

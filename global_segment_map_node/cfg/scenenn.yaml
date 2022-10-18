@@ -1,7 +1,8 @@
 world_frame_id: "world"
+pointcloud_frame: ""
 
 voxblox:
-  voxel_size: 0.01
+  voxel_size: 0.02
   truncation_distance_factor: 5.0
   voxel_carving_enabled: false
   max_ray_length_m: 3
@@ -10,9 +11,10 @@ semantic_instance_segmentation:
   enable_semantic_instance_segmentation: true
 
 meshing:
-  visualize: true
-  update_mesh_every_n_sec: 2.0
+  visualize: false
+  update_mesh_every_n_sec: 0.0
   publish_scene_mesh: false
+  publish_semantic_scene: fasle
   visualizer_parameters:
     camera_position: [-1.41162,    6.28602,   -0.300336,
                       -1.49346,    0.117437,   0.0843885,
@@ -20,4 +22,4 @@ meshing:
     clip_distances: [1.79126, 8.86051]
 
 debug:
-  verbose_log: true
+  verbose_log: false

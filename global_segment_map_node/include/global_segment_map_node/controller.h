@@ -24,6 +24,10 @@
 #include <vpp_msgs/GetListSemanticInstances.h>
 #include <vpp_msgs/GetMap.h>
 #include <vpp_msgs/GetScenePointcloud.h>
+#include <voxblox_msgs/LayerWithTrajectory.h>
+
+#include <minkindr_conversions/kindr_msg.h>
+#include <minkindr_conversions/kindr_tf.h>
 
 namespace voxblox {
 namespace voxblox_gsm {
@@ -84,6 +88,21 @@ class Controller {
       const sensor_msgs::PointCloud2::Ptr& segment_point_cloud_msg);
 
   void integrateFrame(ros::Time msg_timestamp);
+
+  void integrateFrameWithObs(ros::Time msg_timestamp);
+
+  void integratePointcloud(const ros::Time& timestamp, const Transformation& T_G_C,
+                            std::shared_ptr<const Pointcloud> ptcloud_C,
+                            std::shared_ptr<const Colors> colors, 
+                            const Label& label,
+                            const bool is_freespace_pointcloud);
+
+  void publishMeshWithHistory();
+
+  virtual void publishMap(bool reset_remote_map = false);
+
+  void updateMesh();
+  void updateMeshEventTest(const ros::TimerEvent& /*event*/);
 
   bool resetMapCallback(std_srvs::Empty::Request& request,
                         std_srvs::Empty::Response& response);
@@ -148,8 +167,22 @@ class Controller {
 
   std::string world_frame_;
 
+  bool verbose_log_;
   bool integration_on_;
   bool received_first_message_;
+
+  // submap parameters
+  int max_gap_, min_n_;
+  float submap_interval_;
+  int num_subscribers_tsdf_map_;
+  
+  std::vector<Transformation> pose_history_queue_;
+
+  MeshIntegratorConfig mesh_history_config_;
+
+  bool publish_mesh_with_history_ = false;
+  bool publish_map_with_trajectory_;
+  bool publish_semantic_scene_;
 
   LabelTsdfMap::Config map_config_;
   LabelTsdfIntegrator::Config tsdf_integrator_config_;
@@ -159,6 +192,7 @@ class Controller {
   std::shared_ptr<LabelTsdfIntegrator> integrator_;
 
   MeshIntegratorConfig mesh_config_;
+//   MeshIntegratorConfig mesh_history_config_;
   MeshLabelIntegrator::LabelTsdfConfig label_tsdf_mesh_config_;
   ros::Timer update_mesh_timer_;
 
@@ -191,6 +225,23 @@ class Controller {
   ros::Publisher* scene_cloud_pub_;
   ros::Publisher* bbox_pub_;
 
+  // define pointcloud_frame from ros param
+  std::string pointcloud_frame_;
+
+  // label_tsdf_server
+  ros::Publisher* mesh_with_history_pub_;
+  ros::Publisher* tsdf_map_pub_;
+
+  ros::Timer create_new_submap_timer_;
+
+  // msg from diffrent frame timestamp
+  ros::Time last_submap_stamp_;
+  ros::Time last_msg_time_ptcloud_;
+  ros::Time last_msg_time_freespace_ptcloud_;
+  ros::Time last_published_submap_timestamp_;
+
+  ros::Duration min_time_between_msgs_;
+
   std::thread viz_thread_;
   Visualizer* visualizer_;
   std::mutex label_tsdf_layers_mutex_;
@@ -198,6 +249,47 @@ class Controller {
   bool mesh_layer_updated_;
   bool need_full_remesh_;
   bool multiple_visualizers_;
+
+  // pointcloud deintegration queue
+  struct PointcloudDeintegrationPacket {
+    const ros::Time timestamp;
+    Transformation T_G_C;
+    std::shared_ptr<const Pointcloud> ptcloud_C;
+    std::shared_ptr<const Colors> colors;
+    const bool is_freespace_pointcloud;
+  };
+  size_t pointcloud_deintegration_queue_length_;
+  std::deque<PointcloudDeintegrationPacket> pointcloud_deintegration_queue_;
+
+  size_t num_voxels_per_block_;
+  bool map_needs_pruning_;
+
+//   virtual void pruneMap();
+  
+
+  void createNewSubmapEvent(const ros::TimerEvent& /*event*/) {
+    createNewSubmap();
+  }
+  void createNewSubmap() {
+    if(submap_interval_ > 0.0 && 
+        (last_msg_time_ptcloud_ - last_submap_stamp_).toSec() > 
+            submap_interval_) {
+        // switch to new submap
+        last_submap_stamp_ = last_msg_time_ptcloud_;
+        publishMap();
+
+        {
+            std::lock_guard<std::mutex> label_tsdf_layers_lock(
+                                            label_tsdf_layers_mutex_);
+
+            map_->getTsdfLayerPtr()->removeAllBlocks();
+            map_->getLabelLayerPtr()->removeAllBlocks();
+            pointcloud_deintegration_queue_.clear();
+            integrator_->resetObsCnt(ros::Time::now().toSec());
+        }
+        
+    }
+  }
 };
 
 }  // namespace voxblox_gsm

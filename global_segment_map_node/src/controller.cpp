@@ -125,7 +125,7 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
       // Increased time limit for lookup in the past of tf messages
       // to give some slack to the pipeline and not lose any messages.
       integrated_frames_count_(0u),
-      tf_listener_(ros::Duration(500)),
+      tf_listener_(ros::Duration(600)),
       world_frame_("world"),
       integration_on_(true),
       publish_scene_map_(false),
@@ -135,19 +135,29 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
       need_full_remesh_(false),
       enable_semantic_instance_segmentation_(true),
       publish_object_bbox_(false),
-      use_label_propagation_(true) {
+      use_label_propagation_(true),
+      publish_map_with_trajectory_(false),
+      submap_interval_(0.0),
+      num_subscribers_tsdf_map_(0),
+      pointcloud_deintegration_queue_length_(0),
+      min_time_between_msgs_(0.0),
+      pointcloud_frame_(""),
+      map_needs_pruning_(false),
+      publish_semantic_scene_(false) {
   CHECK_NOTNULL(node_handle_private_);
 
-  bool verbose_log = false;
-  node_handle_private_->param<bool>("debug/verbose_log", verbose_log,
-                                    verbose_log);
+  bool verbose_log_ = false;
+  node_handle_private_->param<bool>("debug/verbose_log", verbose_log_,
+                                    verbose_log_);
 
-  if (verbose_log) {
+  if (verbose_log_) {
     FLAGS_stderrthreshold = 0;
   }
 
   node_handle_private_->param<std::string>("world_frame_id", world_frame_,
-                                           world_frame_);
+                                              world_frame_);
+  node_handle_private_->param<std::string>("pointcloud_frame", pointcloud_frame_,
+                                              pointcloud_frame_);
 
   // Workaround for OS X on mac mini not having specializations for float
   // for some reason.
@@ -162,6 +172,27 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
     voxels_per_side = map_config_.voxels_per_side;
   }
   map_config_.voxels_per_side = voxels_per_side;
+  num_voxels_per_block_ = map_config_.voxels_per_side * 
+                                       map_config_.voxels_per_side *
+                                       map_config_.voxels_per_side ;
+
+  node_handle_private_->param<bool>("publish_mesh_with_history", publish_mesh_with_history_,
+                                    publish_mesh_with_history_);
+  node_handle_private_->param<bool>("publish_map_with_trajectory", publish_map_with_trajectory_,
+                                    publish_map_with_trajectory_);                                  
+  // Publishing/subscribing to a layer from another node (when using this as
+  // a library, for example within a planner).
+  if(publish_mesh_with_history_) 
+    mesh_with_history_pub_ = new ros::Publisher(
+      node_handle_private_->advertise<voxblox_msgs::Mesh>("mesh_with_history", 10, true));
+
+  if(publish_map_with_trajectory_) {
+    tsdf_map_pub_ = new ros::Publisher(
+        node_handle_private_->advertise<voxblox_msgs::LayerWithTrajectory>("tsdf_map_out", 1, false));
+  } else {
+    tsdf_map_pub_ = new ros::Publisher(
+        node_handle_private_->advertise<voxblox_msgs::Layer>("tsdf_map_out", 1, false));
+  }
 
   map_.reset(new LabelTsdfMap(map_config_));
 
@@ -233,6 +264,7 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
   } else {
     label_tsdf_mesh_config_.class_task = SemanticColorMap::ClassTask::kCoco80;
   }
+  
 
   node_handle_private_->param<bool>("icp/enable_icp",
                                     label_tsdf_integrator_config_.enable_icp,
@@ -247,6 +279,7 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
 
   // Visualization settings.
   bool visualize = false;
+  node_handle_private_->param<bool>("meshing/publish_semantic_scene", publish_semantic_scene_, publish_semantic_scene_);
   node_handle_private_->param<bool>("meshing/visualize", visualize, visualize);
 
   bool save_visualizer_frames = false;
@@ -260,6 +293,10 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
                                     multiple_visualizers_);
 
   mesh_merged_layer_.reset(new MeshLayer(map_->block_size()));
+
+  if(publish_semantic_scene_) {
+    mesh_semantic_layer_.reset(new MeshLayer(map_->block_size()));
+  }
 
   if (multiple_visualizers_) {
     mesh_label_layer_.reset(new MeshLayer(map_->block_size()));
@@ -312,12 +349,24 @@ Controller::Controller(ros::NodeHandle* node_handle_private)
 
   if (update_mesh_every_n_sec > 0.0) {
     update_mesh_timer_ = node_handle_private_->createTimer(
-        ros::Duration(update_mesh_every_n_sec), &Controller::updateMeshEvent,
+        ros::Duration(update_mesh_every_n_sec), &Controller::updateMeshEventTest,
         this);
   }
 
   node_handle_private_->param<std::string>("meshing/mesh_filename",
                                            mesh_filename_, mesh_filename_);
+
+  node_handle_private_->param<float>("submap_interval", 
+                                    submap_interval_, submap_interval_);
+  node_handle_private_->param<int>("max_gap", max_gap_, 4);
+  node_handle_private_->param<int>("min_n", min_n_, 2);
+
+  if(submap_interval_ > 0) {
+    // create_new_submap_timer_ = 
+    //     node_handle_private_->createTimer(ros::Duration(submap_interval_),
+    //                                       &Controller::createNewSubmapEvent, this);
+  }
+
 }
 
 Controller::~Controller() { viz_thread_.join(); }
@@ -430,7 +479,12 @@ void Controller::processSegment(
     const sensor_msgs::PointCloud2::Ptr& segment_point_cloud_msg) {
   // Look up transform from camera frame to world frame.
   Transformation T_G_C;
+  
+  if(pointcloud_frame_.size())
+    segment_point_cloud_msg->header.frame_id = pointcloud_frame_;
   std::string from_frame = segment_point_cloud_msg->header.frame_id;
+
+  // TODO(lxl) check if we can get the next message from queue , find TF, if not, pop
   if (lookupTransform(from_frame, world_frame_,
                       segment_point_cloud_msg->header.stamp, &T_G_C)) {
     // Convert the PCL pointcloud into voxblox format.
@@ -468,9 +522,143 @@ void Controller::processSegment(
     timing::Timer label_candidates_timer("compute_label_candidates");
 
     if (use_label_propagation_) {
+      // std::lock_guard<std::mutex> label_tsdf_layers_lock(
+      //   label_tsdf_layers_mutex_);
+
       integrator_->computeSegmentLabelCandidates(
           segment, &segment_label_candidates, &segment_merge_candidates_);
     }
+  }
+}
+
+void Controller::integratePointcloud(const ros::Time& timestamp, const Transformation& T_G_C,
+                            std::shared_ptr<const Pointcloud> ptcloud_C,
+                            std::shared_ptr<const Colors> colors, 
+                            const Label& label,
+                            const bool is_freespace_pointcloud) {
+  CHECK_EQ(ptcloud_C->size(), colors->size());
+  integrator_->integratePointCloudWithObs(timestamp.toSec(), T_G_C, *ptcloud_C, *colors,
+                                           label, is_freespace_pointcloud);
+  
+  if(pointcloud_deintegration_queue_length_ > 0) {
+    pointcloud_deintegration_queue_.emplace_back(PointcloudDeintegrationPacket{timestamp, 
+                                                    T_G_C, ptcloud_C, colors, 
+                                                    is_freespace_pointcloud});                                               
+  } else if(submap_interval_ > 0.0) {
+    pointcloud_deintegration_queue_.emplace_back(PointcloudDeintegrationPacket{timestamp,
+                                                  T_G_C, std::make_shared<Pointcloud>(Pointcloud()),
+                                                  std::make_shared<Colors>(Colors()), is_freespace_pointcloud});
+  }
+}
+
+void Controller::integrateFrameWithObs(ros::Time msg_timestamp) {
+  LOG(INFO) << "Integrating frame n." << ++integrated_frames_count_
+            << ", timestamp of frame: " << msg_timestamp.toSec();
+  ros::WallTime start;
+  ros::WallTime end;
+
+  // mark last_msg_time_ptcloud_
+  if(msg_timestamp - last_msg_time_ptcloud_ > 
+      min_time_between_msgs_) {
+        last_msg_time_ptcloud_ = msg_timestamp;
+      }
+
+  if (use_label_propagation_) {
+    start = ros::WallTime::now();
+    timing::Timer propagation_timer("label_propagation");
+    // std::lock_guard<std::mutex> label_tsdf_layers_lock(
+    //     label_tsdf_layers_mutex_);
+
+    integrator_->decideLabelPointClouds(&segments_to_integrate_,
+                                        &segment_label_candidates,
+                                        &segment_merge_candidates_);
+    propagation_timer.Stop();
+    end = ros::WallTime::now();
+    LOG(INFO) << "Decided labels for " << segments_to_integrate_.size()
+              << " pointclouds in " << (end - start).toSec() << " seconds.";
+  }
+
+  constexpr bool kIsFreespacePointcloud = false;
+
+  start = ros::WallTime::now();
+  timing::Timer integrate_timer("integrate_frame_pointclouds");
+  Transformation T_G_C = segments_to_integrate_.at(0)->T_G_C_;
+  Pointcloud point_cloud_all_segments_t;
+  for (Segment* segment : segments_to_integrate_) {
+    // Concatenate point clouds. (NOTE(ff): We should probably just use
+    // the original cloud here instead.)
+    Pointcloud::iterator it = point_cloud_all_segments_t.end();
+    point_cloud_all_segments_t.insert(it, segment->points_C_.begin(),
+                                      segment->points_C_.end());
+  }
+  Transformation T_Gicp_C = T_G_C;
+  if (label_tsdf_integrator_config_.enable_icp) {
+    // TODO(ntonci): Make icp config members ros params.
+    // integrator_->icp_.reset(new
+    // ICP(getICPConfigFromRosParam(nh_private)));
+    T_Gicp_C =
+        integrator_->getIcpRefined_T_G_C(T_G_C, point_cloud_all_segments_t);
+  }
+
+  {
+    // std::lock_guard<std::mutex> label_tsdf_layers_lock(
+    //     label_tsdf_layers_mutex_);
+    for (Segment* segment : segments_to_integrate_) {
+      CHECK_NOTNULL(segment);
+      segment->T_G_C_ = T_Gicp_C;
+
+      integratePointcloud(msg_timestamp, segment->T_G_C_, 
+                            std::make_shared<Pointcloud>(segment->points_C_),
+                            std::make_shared<Colors>(segment->colors_), 
+                            segment->label_, kIsFreespacePointcloud);
+    }
+  }
+
+  integrate_timer.Stop();
+  end = ros::WallTime::now();
+  LOG(INFO) << "Integrated " << segments_to_integrate_.size()
+            << " pointclouds in " << (end - start).toSec() << " secs. ";
+
+  LOG(INFO) << "The map contains "
+            << map_->getTsdfLayerPtr()->getNumberOfAllocatedBlocks()
+            << " tsdf and "
+            << map_->getLabelLayerPtr()->getNumberOfAllocatedBlocks()
+            << " label blocks.";
+
+  start = ros::WallTime::now();
+
+  integrator_->mergeLabels(&merges_to_publish_);
+  integrator_->getLabelsToPublish(&segment_labels_to_publish_);
+
+  end = ros::WallTime::now();
+  LOG(INFO) << "Merged segments in " << (end - start).toSec() << " seconds.";
+  start = ros::WallTime::now();
+
+  segment_merge_candidates_.clear();
+  segment_label_candidates.clear();
+  for (Segment* segment : segments_to_integrate_) {
+    delete segment;
+  }
+  segments_to_integrate_.clear();
+
+  end = ros::WallTime::now();
+  LOG(INFO) << "Cleared candidates and memory in " << (end - start).toSec()
+            << " seconds.";
+
+  LOG(INFO) << "Timings: " << std::endl << timing::Timing::Print() << std::endl;
+
+  if(submap_interval_ > 0.0 && (msg_timestamp - last_published_submap_timestamp_).toSec(
+      ) > submap_interval_) {
+    publishMap();
+
+    map_->getTsdfLayerPtr()->removeAllBlocks();
+    // map_->getLabelLayerPtr()->removeAllBlocks();
+    pointcloud_deintegration_queue_.clear();
+    integrator_->resetObsCnt(ros::Time::now().toSec());
+
+    last_published_submap_timestamp_ = msg_timestamp;
+
+    LOG(INFO) << "Publish submap haved completed" << std::endl;
   }
 }
 
@@ -576,7 +764,8 @@ void Controller::segmentPointCloudCallback(
   if (received_first_message_ &&
       last_segment_msg_timestamp_ != segment_point_cloud_msg->header.stamp) {
     if (segments_to_integrate_.size() > 0u) {
-      integrateFrame(segment_point_cloud_msg->header.stamp);
+      // integrateFrame(segment_point_cloud_msg->header.stamp);
+      integrateFrameWithObs(segment_point_cloud_msg->header.stamp);
     } else {
       LOG(INFO) << "No segments to integrate.";
     }
@@ -594,6 +783,14 @@ void Controller::resetMeshIntegrators() {
   mesh_merged_integrator_.reset(
       new MeshLabelIntegrator(mesh_config_, label_tsdf_mesh_config_, map_.get(),
                               mesh_merged_layer_.get(), &need_full_remesh_));
+
+  if(publish_semantic_scene_) {
+    label_tsdf_mesh_config_.color_scheme =
+        MeshLabelIntegrator::ColorScheme::kSemantic;
+    mesh_semantic_integrator_.reset(new MeshLabelIntegrator(
+        mesh_config_, label_tsdf_mesh_config_, map_.get(),
+        mesh_semantic_layer_.get(), &need_full_remesh_));
+  }
 
   if (multiple_visualizers_) {
     label_tsdf_mesh_config_.color_scheme =
@@ -687,6 +884,60 @@ bool Controller::getMapCallback(vpp_msgs::GetMap::Request& /* request */,
   }
 
   return true;
+}
+
+void Controller::publishMap(bool reset_remote_map) {
+  if(map_needs_pruning_) {
+    // pruneMap();
+  }
+
+  if(publish_mesh_with_history_) {
+    publishMeshWithHistory();
+  }
+
+  // if(!publish_tsdf_map_) return;
+
+  int subscribers = this->tsdf_map_pub_->getNumSubscribers();
+  if (subscribers > 0) {
+    if (num_subscribers_tsdf_map_ < subscribers) {
+      // Always reset the remote map and send all when a new subscriber
+      // subscribes. A bit of overhead for other subscribers, but better than
+      // inconsistent map states.
+      reset_remote_map = true;
+    }
+    const bool only_updated = !reset_remote_map;
+    timing::Timer publish_map_timer("map/publish_tsdf");
+    voxblox_msgs::Layer layer_msg;
+    // serializeLayerAsMsg<TsdfVoxel>(this->map_->getTsdfLayer(),
+    //                                 only_updated, &layer_msg);
+
+    // serializeMapAsMsg(map_, only_updated, &layer_msg);
+    serializeMapAsMsg(map_, false, &layer_msg);
+
+
+    if(reset_remote_map) {
+      layer_msg.action = static_cast<uint8_t>(MapDerializationAction::kReset);
+      // reset_remote_map = false;
+    }
+    if(publish_map_with_trajectory_) {
+      voxblox_msgs::LayerWithTrajectory layer_with_trajectory_msg;
+      layer_with_trajectory_msg.layer = layer_msg;
+      for(const PointcloudDeintegrationPacket& pointcloud_queue_packet :
+            pointcloud_deintegration_queue_) {
+        geometry_msgs::PoseStamped pose_msg;
+        pose_msg.header.frame_id = world_frame_;
+        pose_msg.header.stamp = pointcloud_queue_packet.timestamp;
+        tf::poseKindrToMsg(pointcloud_queue_packet.T_G_C.cast<double>(),
+                            &pose_msg.pose);
+        layer_with_trajectory_msg.trajectory.poses.emplace_back(pose_msg);
+      }
+      this->tsdf_map_pub_->publish(layer_with_trajectory_msg);
+    } else {
+      this->tsdf_map_pub_->publish(layer_msg);
+    }
+    publish_map_timer.Stop();
+  }
+  num_subscribers_tsdf_map_ = subscribers;
 }
 
 bool Controller::generateMeshCallback(std_srvs::Empty::Request& request,
@@ -997,6 +1248,111 @@ void Controller::generateMesh(bool clear_mesh) {  // NOLINT
 
   LOG(INFO) << "Mesh Timings: " << std::endl
             << voxblox::timing::Timing::Print();
+}
+
+void Controller::publishMeshWithHistory() {
+  if(verbose_log_) {
+    ROS_INFO("publishing mesh with history");
+  }
+  std::shared_ptr<MeshLayer> mesh_semantic_layer(
+        new MeshLayer(map_->block_size()));
+
+  mesh_history_config_ = mesh_config_;
+  mesh_history_config_.use_history = true;
+
+  label_tsdf_mesh_config_.color_scheme = 
+      MeshLabelIntegrator::ColorScheme::kSemantic;
+  std::shared_ptr<MeshLabelIntegrator> mesh_semantic_integrator(
+      new MeshLabelIntegrator(mesh_history_config_,
+                              label_tsdf_mesh_config_,
+                              map_.get(),
+                              mesh_semantic_layer.get()));
+  
+  std::lock_guard<std::mutex> mesh_layer_lock(mesh_layer_mutex_);
+  {
+    std::lock_guard<std::mutex> label_tsdf_layers_lock(
+        label_tsdf_layers_mutex_);
+
+    mesh_semantic_integrator->generateMesh(false, true);
+    double start_time = 
+        pointcloud_deintegration_queue_.begin()->timestamp.toSec();
+    int stamp_offset = 
+        start_time == integrator_->obs_time
+            ? 0
+            : std::round((start_time - integrator_->obs_time) / 0.05);
+    mesh_semantic_integrator->addHistoryToMesh(stamp_offset, max_gap_, min_n_);
+  }
+
+
+
+  voxblox_msgs::Mesh mesh_msg;
+  generateVoxbloxMeshMsg(mesh_semantic_layer, ColorMode::kColor, &mesh_msg);
+  mesh_msg.header.frame_id = world_frame_;
+
+  for(const PointcloudDeintegrationPacket& pointcloud_queue_packet :
+        pointcloud_deintegration_queue_) {
+    geometry_msgs::PoseStamped pose_msg;
+    pose_msg.header.frame_id = world_frame_;
+    pose_msg.header.stamp = pointcloud_queue_packet.timestamp;
+    tf::poseKindrToMsg(pointcloud_queue_packet.T_G_C.cast<double>(),
+                        &pose_msg.pose);
+    mesh_msg.trajectory.poses.emplace_back(pose_msg);
+  }
+
+  mesh_with_history_pub_->publish(mesh_msg);
+}
+
+void Controller::updateMeshEventTest(const ros::TimerEvent& e) {
+  updateMesh();
+}
+
+void Controller::updateMesh() {
+  if(verbose_log_) {
+    ROS_INFO("updating mesh.");
+  }
+  std::lock_guard<std::mutex>  mesh_layer_lock(mesh_layer_mutex_);
+  {
+    std::lock_guard<std::mutex> label_tsdf_layers_lock(
+      label_tsdf_layers_mutex_);
+    timing::Timer generate_mesh_timer("mesh/update");
+    // constexpr bool only_mesh_updated_blocks = true;
+    constexpr bool clear_updated_flag = true;
+
+    bool only_mesh_updated_blocks = true;
+    if (need_full_remesh_) {
+      only_mesh_updated_blocks = false;
+      need_full_remesh_ = false;
+    }
+
+    // mesh_layer_updated_ |= mesh_merged_integrator_->generateMesh(
+    //   only_mesh_updated_blocks, clear_updated_flag);
+
+    mesh_layer_updated_ |= mesh_merged_integrator_->generateMesh(
+      false, true);
+
+    // semantic_integrator
+    mesh_layer_updated_ |= mesh_semantic_integrator_->generateMesh(
+      true, true);
+
+    generate_mesh_timer.Stop();
+  }
+  
+  if(publish_scene_mesh_) {
+    timing::Timer publish_mesh_timer("mesh/publish");
+    voxblox_msgs::Mesh mesh_msg;
+
+    
+    if(publish_semantic_scene_) {
+      generateVoxbloxMeshMsg(mesh_semantic_layer_, ColorMode::kColor, &mesh_msg); 
+    } else {
+      generateVoxbloxMeshMsg(mesh_merged_layer_, ColorMode::kColor, &mesh_msg);
+    }
+    
+    mesh_msg.header.frame_id = world_frame_;
+    scene_mesh_pub_->publish(mesh_msg);
+    publish_mesh_timer.Stop();
+  }
+
 }
 
 void Controller::updateMeshEvent(const ros::TimerEvent& e) {

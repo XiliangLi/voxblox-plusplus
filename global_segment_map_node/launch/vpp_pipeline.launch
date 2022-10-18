@@ -2,10 +2,12 @@
   <arg name="scene_name" default="asl_office_floor" />
   <arg name="sensor_name" default="primesense" />
   <arg name="visualize" default="true" />
+  <arg name="debug" default="false" />
 
   <include file="$(find mask_rcnn_ros)/launch/mask_rcnn_node.launch">
     <arg name="sensor_name" value="$(arg sensor_name)" />
     <arg name="visualize" value="$(arg visualize)" />
+    <arg name="debug" value="$(arg debug)" />
   </include>
 
   <include file="$(find depth_segmentation)/launch/semantic_depth_segmentation.launch">
@@ -16,6 +18,7 @@
   <include file="$(find gsm_node)/launch/gsm_node.launch">
     <arg name="scene_name" value="$(arg scene_name)" />
     <arg name="visualize" value="$(arg visualize)" />
+    <arg name="debug" value="$(arg debug)" />
   </include>
 
 </launch>

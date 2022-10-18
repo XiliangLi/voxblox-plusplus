@@ -79,7 +79,19 @@ class LabelTsdfIntegrator : public MergedTsdfIntegrator {
   // Segment integration.
   void integratePointCloud(const Transformation& T_G_C,
                            const Pointcloud& points_C, const Colors& colors,
-                           const Label& label, const bool freespace_points);
+                           const Label& label, const bool freespace_points, const bool deintegrate = false);
+
+  // add observe time
+  void integratePointCloudWithObs(double time, const Transformation& T_G_C,
+                                    const Pointcloud& points_C,
+                                    const Colors& colors,
+                                    const Label& label,
+                                    const bool freespace_points = false,
+                                    const bool deintegrate = false) {
+    if(obs_time == 0) obs_time = time;
+    obs_cnt_ = time == obs_time ? 0 : std::round((time - obs_time) / 0.05);
+    integratePointCloud(T_G_C, points_C, colors, label, freespace_points, deintegrate); 
+  }
 
   // Segment merging.
   // Not thread safe.

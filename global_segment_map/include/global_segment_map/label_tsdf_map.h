@@ -11,6 +11,9 @@
 
 #include "global_segment_map/label_voxel.h"
 #include "global_segment_map/semantic_instance_label_fusion.h"
+#include "global_segment_map/meshing/semantic_color_map.h"
+
+#include <ros/ros.h>
 
 namespace voxblox {
 
@@ -32,7 +35,9 @@ class LabelTsdfMap {
             new Layer<LabelVoxel>(config.voxel_size, config.voxels_per_side)),
         config_(config),
         highest_label_(0u),
-        highest_instance_(0u) {}
+        highest_instance_(0u),
+        semantic_color_map_(SemanticColorMap::create(
+        SemanticColorMap::ClassTask::kCoco80)) {}
 
   virtual ~LabelTsdfMap() {}
 
@@ -93,6 +98,9 @@ class LabelTsdfMap {
   void extractInstanceLayers(
       const InstanceLabels& instance_labels,
       std::unordered_map<InstanceLabel, LayerPair>* instance_layers_map);
+
+  // Color maps
+  SemanticColorMap semantic_color_map_;
 
  protected:
   Config config_;

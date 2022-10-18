@@ -1,3 +1,4 @@
 [submodule "voxblox"]
 	path = voxblox
-	url = https://github.com/ethz-asl/voxblox.git
+	url = git@github.com:XiliangLi/voxblox.git
+	version = feature/multi_robots_voxbb

@@ -1,6 +1,16 @@
 segment_point_cloud_topic: "/depth_segmentation_node/object_segment"
 world_frame_id: "world"
 use_label_propagation: true
+method: "merged"
+
+# <!-- add for coxgraph -->
+publish_mesh_with_history: true
+publish_map_with_trajectory: true
+submap_interval: 2.0
+max_gap: 4
+min_n: 2
+
+
 
 voxblox:
   voxel_size: 0.02
@@ -24,7 +34,7 @@ semantic_instance_segmentation:
   class_tsdk: "coco80"
 
 publishers:
-  publish_scene_map: true
+  publish_scene_map: false
   publish_scene_mesh: true
   publish_object_bbox: false
 

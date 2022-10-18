@@ -2,6 +2,27 @@
 
 namespace voxblox {
 
+// inline LabelTsdfMap::Config getLabelTsdfMapConfigFromRosParam(
+//     const ros::NodeHandle& nh_private) {
+//   LabelTsdfMap::Config label_tsdf_config;
+//   double voxel_size = label_tsdf_config.voxel_size;
+//   int voxels_per_side = label_tsdf_config.voxels_per_side;
+
+//   nh_private.param<double>("voxblox/voxel_size", voxel_size, voxel_size);
+//   nh_private.param<int>("voxblox/voxels_per_side", voxels_per_side,
+//                                                    voxels_per_side);
+//   if (!isPowerOfTwo(voxels_per_side)) {
+//     LOG(ERROR)
+//         << "voxels_per_side must be a power of 2, setting to default value.";
+//     voxels_per_side = label_tsdf_config.voxels_per_side;
+//   }
+
+//   label_tsdf_config.voxels_per_side = voxels_per_side;
+//   label_tsdf_config.voxel_size = static_cast<FloatingPoint>(voxel_size);
+
+//   return label_tsdf_config;                                                  
+// }  
+
 Labels LabelTsdfMap::getLabelList() {
   Labels labels;
   int count_unused_labels = 0;
