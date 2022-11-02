@@ -29,7 +29,7 @@ class SemanticInstanceLabelFusion {
   void increaseLabelClassCount(const Label& label,
                                const SemanticLabel& semantic_label);
 
-  SemanticLabel getSemanticLabel(const Label& label) const;
+  SemanticPair getSemanticLabel(const Label& label) const;
 
  protected:
   std::map<Label, std::map<InstanceLabel, int>> label_instance_count_;

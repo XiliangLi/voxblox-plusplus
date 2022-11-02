@@ -106,12 +106,13 @@ void SemanticInstanceLabelFusion::increaseLabelClassCount(
   }
 }
 
-SemanticLabel SemanticInstanceLabelFusion::getSemanticLabel(
+SemanticPair SemanticInstanceLabelFusion::getSemanticLabel(
     const Label& label) const {
   SemanticLabel semantic_label = 0u;
+  SemanticPair semantic_count_pair;
 
   if (getInstanceLabel(label) == BackgroundLabel) {
-    return semantic_label;
+    return semantic_count_pair;
   }
   int max_count = 0;
   auto label_it = label_class_count_.find(label);
@@ -124,7 +125,9 @@ SemanticLabel SemanticInstanceLabelFusion::getSemanticLabel(
       }
     }
   }
-  return semantic_label;
+  semantic_count_pair.semantic_label = semantic_label;
+  semantic_count_pair.semantic_count = max_count;
+  return semantic_count_pair;
 }
 
 }  // namespace voxblox

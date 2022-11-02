@@ -37,7 +37,7 @@ void serializeMapAsMsg(std::shared_ptr<const LabelTsdfMap> map,
   msg->blocks.reserve(block_list.size());
 
   // block paramers
-  constexpr size_t kNumDataPacketsPerVoxel = 3u;
+  constexpr size_t kNumDataPacketsPerVoxel = 5u;
   size_t vps = tsdf_layer.voxels_per_side();
   size_t num_voxels_per_block = vps * vps * vps;
 
@@ -78,14 +78,28 @@ void serializeMapAsMsg(std::shared_ptr<const LabelTsdfMap> map,
         // get voxel color
         Label segment_label = label_voxel.label;
         SemanticLabel semantic_class = BackgroundLabel;
+        SemanticPair semantic_count_pair;
         InstanceLabel instance_id = 
             semantic_instance_label_fusion.getInstanceLabel(
                 segment_label, kFramesCountThresholdFactor);
         
         if(instance_id) {
-          semantic_class = semantic_instance_label_fusion.getSemanticLabel(
+          semantic_count_pair = semantic_instance_label_fusion.getSemanticLabel(
               label_voxel.label);
+          semantic_class = semantic_count_pair.semantic_label;  
         }
+
+        tsdf_voxel.semantic_label = semantic_class;
+        tsdf_voxel.semantic_count = semantic_count_pair.semantic_count;
+        
+        // add semantic information
+        const uint32_t* bytes_3_ptr = 
+            reinterpret_cast<const uint32_t*>(&tsdf_voxel.semantic_label);
+        data.push_back(*bytes_3_ptr);
+
+        const uint32_t* bytes_4_ptr = 
+            reinterpret_cast<const uint32_t*>(&tsdf_voxel.semantic_count);
+        data.push_back(*bytes_4_ptr);
 
         voxblox::Color color;
         map->semantic_color_map_.getColor(semantic_class, &color);
@@ -145,13 +159,15 @@ inline void createPointcloudFromMap(const LabelTsdfMap& map,
       if (tsdf_voxel.weight > kMinWeight) {
         Label segment_label = label_voxel.label;
         SemanticLabel semantic_class = BackgroundLabel;
+        SemanticPair semantic_count_pair;
         InstanceLabel instance_id =
             semantic_instance_label_fusion.getInstanceLabel(
                 segment_label, kFramesCountThresholdFactor);
 
         if (instance_id) {
-          semantic_class = semantic_instance_label_fusion.getSemanticLabel(
+          semantic_count_pair = semantic_instance_label_fusion.getSemanticLabel(
               label_voxel.label);
+          semantic_class = semantic_count_pair.semantic_label;
         }
 
         PointMapType point;

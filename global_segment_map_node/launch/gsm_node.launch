@@ -2,6 +2,10 @@
   <arg name="scene_name" default="asl_office_floor" />
   <arg name="visualize" default="false" />
   <arg name="debug" default="true"/> 
+  <arg name="tsdf_voxel_size" default="0.02"/>
+  <arg name="voxels_per_side" default="8"/>
+  <arg name="truncation_distance" default="0.1"/>
+  <arg name="truncation_distance_factor" default="5.0"/>
 
   <arg if="$(arg debug)" name="launch_prefix" default="gnome-terminal -x gdb -ex run --args"/>
   <arg unless="$(arg debug)" name="launch_prefix" default="gnome-terminal -x   "/>
@@ -10,5 +14,9 @@
     <rosparam command="load" file="$(find gsm_node)/cfg/default.yaml" />
     <rosparam command="load" file="$(find gsm_node)/cfg/$(arg scene_name).yaml" />
     <param name="meshing/visualize" value="$(arg visualize)" />
+    <param name="voxblox/voxel_size" value="$(arg tsdf_voxel_size)"/>
+    <param name="voxblox/voxels_per_side" value="$(arg voxels_per_side)"/>
+    <param name="voxblox/truncation_distance" value="$(arg truncation_distance)"/>
+    <param name="voxblox/truncation_distance_factor" value="$(arg truncation_distance_factor)"/>
   </node>
 </launch>

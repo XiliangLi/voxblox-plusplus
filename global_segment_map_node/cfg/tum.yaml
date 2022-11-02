@@ -1,5 +1,5 @@
-world_frame_id: "map_0"
-pointcloud_frame: "robot_base_0"
+world_frame_id: "world"
+pointcloud_frame: "openni_rgb_optical_frame"
 
 voxblox:
   voxel_size: 0.02
@@ -14,12 +14,12 @@ meshing:
   visualize: false
   update_mesh_every_n_sec: 0.0
   publish_scene_mesh: false
-  publish_semantic_scene: fasle
+  publish_semantic_scene: false
   visualizer_parameters:
-    camera_position: [ -9.26672, -7.73843, 22.3946,
-                      -12.9445,  -8.20767, -5.76437,
-                       -0.395892, 0.917575, 0.0364161]
-    clip_distances: [16.4938, 31.2009]
+    camera_position: [-1.41162,    6.28602,   -0.300336,
+                      -1.49346,    0.117437,   0.0843885,
+                       0.0165199, -0.0624571, -0.997911]
+    clip_distances: [1.79126, 8.86051]
 
 debug:
   verbose_log: false

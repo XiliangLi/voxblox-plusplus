@@ -6,7 +6,7 @@ method: "merged"
 # <!-- add for coxgraph -->
 publish_mesh_with_history: true
 publish_map_with_trajectory: true
-submap_interval: 2.0
+submap_interval: 5.0
 max_gap: 4
 min_n: 2
 

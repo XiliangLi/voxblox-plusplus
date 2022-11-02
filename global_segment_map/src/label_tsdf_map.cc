@@ -76,8 +76,9 @@ void LabelTsdfMap::getSemanticInstanceList(InstanceLabels* instance_labels,
       // make sure to only add once each instance_label.
       auto ret = instance_labels_set.emplace(instance_label);
       if (ret.second) {
-        SemanticLabel semantic_label =
+        SemanticPair semantic_count_pair =
             semantic_instance_label_fusion_.getSemanticLabel(label);
+        SemanticLabel semantic_label = semantic_count_pair.semantic_label;
         CHECK_NE(semantic_label, 0u)
             << "Instance assigned to semantic category BACKGROUND.";
         instance_labels->push_back(instance_label);

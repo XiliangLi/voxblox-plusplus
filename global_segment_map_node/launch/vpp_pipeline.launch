@@ -3,6 +3,11 @@
   <arg name="sensor_name" default="primesense" />
   <arg name="visualize" default="true" />
   <arg name="debug" default="false" />
+  <arg name="tsdf_voxel_size" default="0.02"/>
+  <arg name="voxels_per_side" default="8"/>
+  <arg name="truncation_distance" default="0.1"/>
+  <arg name="truncation_distance_factor" default="5.0"/>
+
 
   <include file="$(find mask_rcnn_ros)/launch/mask_rcnn_node.launch">
     <arg name="sensor_name" value="$(arg sensor_name)" />
@@ -19,6 +24,10 @@
     <arg name="scene_name" value="$(arg scene_name)" />
     <arg name="visualize" value="$(arg visualize)" />
     <arg name="debug" value="$(arg debug)" />
+    <arg name="tsdf_voxel_size" value="$(arg tsdf_voxel_size)"/>
+    <arg name="voxels_per_side" value="$(arg voxels_per_side)"/>
+    <arg name="truncation_distance" value="$(arg truncation_distance)"/>
+    <arg name="truncation_distance_factor" value="$(arg truncation_distance_factor)"/>
   </include>
 
 </launch>

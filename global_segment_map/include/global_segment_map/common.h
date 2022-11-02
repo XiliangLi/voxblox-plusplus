@@ -17,6 +17,7 @@ typedef uint16_t Label;
 typedef uint16_t LabelConfidence;
 typedef uint16_t InstanceLabel;
 typedef uint8_t SemanticLabel;
+typedef uint16_t SemanticCount; 
 
 typedef std::vector<Label> Labels;
 typedef std::vector<SemanticLabel> SemanticLabels;
@@ -36,6 +37,12 @@ typedef std::map<Label, SLMap> LSLMap;
 struct LabelCount {
   Label label = 0u;
   LabelConfidence label_confidence = 0u;
+};
+
+// semanticlabel and semanticcount pair
+struct SemanticPair {
+  SemanticLabel semantic_label = 0u;
+  SemanticCount semantic_count = 0u;
 };
 
 struct PointSurfelLabel {

@@ -528,6 +528,8 @@ void Controller::processSegment(
       integrator_->computeSegmentLabelCandidates(
           segment, &segment_label_candidates, &segment_merge_candidates_);
     }
+  } else {
+    LOG(ERROR) << "Cation: this segment can't lookfor transform even using latest timestamp.";
   }
 }
 
@@ -1165,9 +1167,10 @@ bool Controller::lookupTransform(const std::string& from_frame,
   // up the latest (this is to work with bag files and static transform
   // publisher, etc).
   if (!tf_listener_.canTransform(to_frame, from_frame, time_to_lookup)) {
+    std::cout <<"Timestamp: " << time_to_lookup << " can't find transform using latest time" << std::endl;
     time_to_lookup = ros::Time(0);
     LOG(ERROR) << "Using latest TF transform instead of timestamp match.";
-    return false;
+    // return false;
   }
 
   try {

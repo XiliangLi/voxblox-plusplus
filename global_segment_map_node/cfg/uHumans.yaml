@@ -1,11 +1,12 @@
-world_frame_id: "map_0"
-pointcloud_frame: "robot_base_0"
+world_frame_id: "world"
+pointcloud_frame: "left_cam"
+submap_interval: 5.0
 
 voxblox:
-  voxel_size: 0.02
-  truncation_distance_factor: 5.0
+  voxel_size: 0.10
+  truncation_distance_factor: 4
   voxel_carving_enabled: false
-  max_ray_length_m: 3
+  max_ray_length_m: 12
 
 semantic_instance_segmentation:
   enable_semantic_instance_segmentation: true
@@ -16,10 +17,13 @@ meshing:
   publish_scene_mesh: false
   publish_semantic_scene: fasle
   visualizer_parameters:
+    # camera_position: [-1.91571,  -0.148907, 1.38851,   # Position - x y z
+    #                    0.335035, -1.0907,  -0.0125681, # Focal point - x y z
+    #                    0.480502, -0.139695, 0.865796]  # View up - x y z
+    # clip_distances: [ 0.00685696, 6.85696]
     camera_position: [ -9.26672, -7.73843, 22.3946,
                       -12.9445,  -8.20767, -5.76437,
                        -0.395892, 0.917575, 0.0364161]
     clip_distances: [16.4938, 31.2009]
-
 debug:
   verbose_log: false

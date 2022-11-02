@@ -254,11 +254,13 @@ void MeshLabelIntegrator::updateMeshColor(const Block<LabelVoxel>& label_block,
         } break;
         case kSemantic: {
           SemanticLabel semantic_label = 0u;
+          SemanticPair semantic_count_pair;
           InstanceLabel instance_label = getInstanceLabel(voxel.label);
           if (instance_label != BackgroundLabel) {
-            semantic_label =
+            semantic_count_pair =
                 semantic_instance_label_fusion_ptr_->getSemanticLabel(
                     voxel.label);
+            semantic_label = semantic_count_pair.semantic_label;
           }
           semantic_color_map_.getColor(semantic_label, &(mesh->colors[i]));
         } break;
@@ -294,10 +296,12 @@ void MeshLabelIntegrator::updateMeshColor(const Block<LabelVoxel>& label_block,
         case kSemantic: {
           SemanticLabel semantic_label = 0u;
           InstanceLabel instance_label = getInstanceLabel(voxel.label);
+          SemanticPair semantic_count_pair;
           if (instance_label != BackgroundLabel) {
-            semantic_label =
+            semantic_count_pair =
                 semantic_instance_label_fusion_ptr_->getSemanticLabel(
                     voxel.label);
+                semantic_label = semantic_count_pair.semantic_label;
           }
           semantic_color_map_.getColor(semantic_label, &(mesh->colors[i]));
         } break;
