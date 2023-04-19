@@ -3,6 +3,8 @@
   <arg name="sensor_name" default="primesense" />
   <arg name="visualize" default="true" />
   <arg name="debug" default="false" />
+  <arg name="world_frame_id" default="world" />
+  <arg name="pointcloud_frame" default="pointcloud_default" />
   <arg name="tsdf_voxel_size" default="0.02"/>
   <arg name="voxels_per_side" default="8"/>
   <arg name="truncation_distance" default="0.1"/>
@@ -24,6 +26,8 @@
     <arg name="scene_name" value="$(arg scene_name)" />
     <arg name="visualize" value="$(arg visualize)" />
     <arg name="debug" value="$(arg debug)" />
+    <arg name="world_frame_id" default="$(arg world_frame_id)" />
+    <arg name="pointcloud_frame" default="$(arg pointcloud_frame)" />
     <arg name="tsdf_voxel_size" value="$(arg tsdf_voxel_size)"/>
     <arg name="voxels_per_side" value="$(arg voxels_per_side)"/>
     <arg name="truncation_distance" value="$(arg truncation_distance)"/>

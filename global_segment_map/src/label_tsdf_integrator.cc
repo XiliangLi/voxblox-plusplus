@@ -378,10 +378,10 @@ void LabelTsdfIntegrator::decideLabelPointClouds(
         if (instance_label != 0u) {
           assigned_instances.emplace(instance_label);
         }
-        // TODO(margaritaG): handle this nicely or remove.
-        // if ((*segment_it)->points_C_.size() > 2500) {
-        //   decreaseLabelInstanceCount(label, instance_label);
-        // }
+        // TODO(margaritaG): handle this nicely or remove.  // maybe applyed
+        if ((*segment_it)->points_C_.size() > 2500) {
+          semantic_instance_label_fusion_ptr_->decreaseLabelInstanceCount(label, instance_label);
+        }
       }
     }
   }

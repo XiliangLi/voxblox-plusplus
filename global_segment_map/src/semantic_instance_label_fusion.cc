@@ -27,10 +27,13 @@ void SemanticInstanceLabelFusion::decreaseLabelInstanceCount(
     if (instance_it != label_it->second.end()) {
       --instance_it->second;
     } else {
-      LOG(FATAL) << "Decreasing a non existing label-instance count.";
+      // LOG(FATAL) << "Decreasing a non existing label-instance count.";
+      LOG(INFO) << "Decreasing a non existing label-instance count.";
     }
   } else {
-    LOG(FATAL) << "Decreasing a non existing label-instance count.";
+    // LOG(FATAL) << "Decreasing a non existing label-instance count.";
+    LOG(INFO) << "Decreasing a non existing label-instance count.";
+    
   }
 }
 

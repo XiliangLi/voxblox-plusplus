@@ -1,11 +1,13 @@
 <launch>
   <arg name="scene_name" default="asl_office_floor" />
   <arg name="visualize" default="false" />
-  <arg name="debug" default="true"/> 
+  <arg name="debug" default="false"/> 
   <arg name="tsdf_voxel_size" default="0.02"/>
   <arg name="voxels_per_side" default="8"/>
   <arg name="truncation_distance" default="0.1"/>
   <arg name="truncation_distance_factor" default="5.0"/>
+  <arg name="world_frame_id" default="world" />
+  <arg name="pointcloud_frame" default="pointcloud_default" />
 
   <arg if="$(arg debug)" name="launch_prefix" default="gnome-terminal -x gdb -ex run --args"/>
   <arg unless="$(arg debug)" name="launch_prefix" default="gnome-terminal -x   "/>
@@ -13,10 +15,13 @@
   <node name="gsm_node" pkg="gsm_node" type="gsm_node" output="screen" args="-alsologtostderr" launch-prefix="$(arg launch_prefix)">
     <rosparam command="load" file="$(find gsm_node)/cfg/default.yaml" />
     <rosparam command="load" file="$(find gsm_node)/cfg/$(arg scene_name).yaml" />
+    <param name="world_frame_id" value="$(arg world_frame_id)" />
+    <param name="pointcloud_frame" value="$(arg pointcloud_frame)" />
     <param name="meshing/visualize" value="$(arg visualize)" />
     <param name="voxblox/voxel_size" value="$(arg tsdf_voxel_size)"/>
     <param name="voxblox/voxels_per_side" value="$(arg voxels_per_side)"/>
     <param name="voxblox/truncation_distance" value="$(arg truncation_distance)"/>
     <param name="voxblox/truncation_distance_factor" value="$(arg truncation_distance_factor)"/>
+    <remap from="/depth_segmentation_node/object_segment" to="depth_segmentation_node/object_segment"/>
   </node>
 </launch>

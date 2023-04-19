@@ -89,9 +89,10 @@ void serializeMapAsMsg(std::shared_ptr<const LabelTsdfMap> map,
           semantic_class = semantic_count_pair.semantic_label;  
         }
 
-        tsdf_voxel.semantic_label = semantic_class;
+        tsdf_voxel.semantic_label = static_cast<uint>(semantic_class);
         tsdf_voxel.semantic_count = semantic_count_pair.semantic_count;
-        
+        // std::cout << "================ label " << tsdf_voxel.semantic_label << " count " << tsdf_voxel.semantic_count << "====================="<< std::endl;
+
         // add semantic information
         const uint32_t* bytes_3_ptr = 
             reinterpret_cast<const uint32_t*>(&tsdf_voxel.semantic_label);

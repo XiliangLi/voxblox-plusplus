@@ -12,12 +12,12 @@ namespace voxblox {
 
 const uint16_t BackgroundLabel = 0u;
 
-// Voxblox++ custom types.
-typedef uint16_t Label;
-typedef uint16_t LabelConfidence;
-typedef uint16_t InstanceLabel;
-typedef uint8_t SemanticLabel;
-typedef uint16_t SemanticCount; 
+// // Voxblox++ custom types.     migrate to voxblox/core/common.h
+// typedef uint16_t Label;
+// typedef uint16_t LabelConfidence;
+// typedef uint16_t InstanceLabel;
+// typedef uint8_t SemanticLabel;
+// typedef uint16_t SemanticCount; 
 
 typedef std::vector<Label> Labels;
 typedef std::vector<SemanticLabel> SemanticLabels;
